@@ -295,6 +295,15 @@ main{max-width:1120px;margin:12px auto;padding:0 14px}
 #timePop .tp-ok{background:var(--accent);color:#fff;border-color:var(--accent)}
 #timePop .tp-clr{color:var(--a-col)}
 
+/* 주간 목표 3분할 (개인·가족·조직) */
+.goal3{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;padding:12px 14px}
+@media(max-width:760px){.goal3{grid-template-columns:1fr}}
+.goal3 label{display:block;font-size:.76rem;font-weight:700;margin-bottom:4px}
+.goal3 label.p{color:#3f6d8e}.goal3 label.f{color:#5e8c46}.goal3 label.o{color:#8c5e2f}
+.goal3 textarea{width:100%;border:1px solid var(--line);border-radius:8px;background:#fff;
+  padding:8px 10px;font-size:.86rem;min-height:72px;outline:none;resize:vertical}
+.goal3 textarea:focus{border-color:var(--accent)}
+
 /* 주간 TODO / 빠른 추가 / 종일 */
 .day-b{min-width:30px;height:32px;border-radius:6px;border:1px solid var(--line);font-size:.62rem;
   line-height:1.15;color:var(--ink-soft);background:#fff;flex-shrink:0}
@@ -410,9 +419,14 @@ main{max-width:1120px;margin:12px auto;padding:0 14px}
     </div>
     <div class="goalbanner" id="weekYearGoal"></div>
     <div class="card" style="margin-top:10px">
-      <h3>주간 목표 · 메모 <span class="sub">일간 화면 상단에도 표시됩니다</span></h3>
-      <div class="goal-edit">
-        <textarea id="weekNotes" placeholder="이번 주에 이루고자 하는 목표와 메모를 적어 두세요." oninput="saveWeekNotes(this.value)"></textarea>
+      <h3>주간 목표 · 메모 <span class="sub">개인 · 가족 · 조직 — 일간 화면 상단에도 표시됩니다</span></h3>
+      <div class="goal3">
+        <div><label class="p">👤 개인</label>
+          <textarea id="weekNotesP" placeholder="개인 목표·메모" oninput="saveWeekNotes('p',this.value)"></textarea></div>
+        <div><label class="f">🏠 가족</label>
+          <textarea id="weekNotesF" placeholder="가족 목표·메모" oninput="saveWeekNotes('f',this.value)"></textarea></div>
+        <div><label class="o">🏢 조직</label>
+          <textarea id="weekNotesO" placeholder="조직(직장·팀) 목표·메모" oninput="saveWeekNotes('o',this.value)"></textarea></div>
       </div>
     </div>
     <div class="card" style="margin-top:14px">
@@ -663,10 +677,10 @@ function renderDaily(){
   const q = QUOTES[doy % QUOTES.length];
   document.getElementById("quoteLine").innerHTML = `“${q[0]}” — <b>${q[1]}</b>`;
   // 주간 목표 배너 (일간 ↔ 주간 연동)
-  const wk = state.weeks[weekStart(curDate)];
+  const wsum = weekNotesSummary(state.weeks[weekStart(curDate)]);
   const bn = document.getElementById("dayWeekGoal");
-  bn.innerHTML = wk?.notes
-    ? `<div class="inner" onclick="openWeek('${weekStart(curDate)}')"><b>📌 이번 주 목표</b><span>${esc(wk.notes)}</span></div>`
+  bn.innerHTML = wsum
+    ? `<div class="inner" onclick="openWeek('${weekStart(curDate)}')"><b>📌 이번 주 목표</b><span>${esc(wsum)}</span></div>`
     : `<div class="inner" onclick="openWeek('${weekStart(curDate)}')"><b>📌 이번 주 목표</b><span style="color:#b3a76e">아직 없음 — 눌러서 주간 화면에서 작성</span></div>`;
   document.getElementById("impTitle").value = day.title||"";
   document.getElementById("noteArea").value = day.notes||"";
@@ -952,7 +966,11 @@ function renderWeekly(){
   document.getElementById("weekYearGoal").innerHTML = yr?.notes
     ? `<div class="inner" onclick="curYear=${s.getFullYear()};setView('yearly')"><b>🎯 ${s.getFullYear()}년 목표</b><span>${esc(yr.notes)}</span></div>`
     : `<div class="inner" onclick="curYear=${s.getFullYear()};setView('yearly')"><b>🎯 ${s.getFullYear()}년 목표</b><span style="color:#b3a76e">아직 없음 — 눌러서 연간 화면에서 작성</span></div>`;
-  document.getElementById("weekNotes").value = state.weeks[ws]?.notes || "";
+  const wko = state.weeks[ws];
+  if(wko && wko.notes && !wko.p && !wko.f && !wko.o){ wko.p = wko.notes; wko.notes = ""; persist(); } // 기존 단일 메모는 '개인' 칸으로 이전
+  document.getElementById("weekNotesP").value = wko?.p || "";
+  document.getElementById("weekNotesF").value = wko?.f || "";
+  document.getElementById("weekNotesO").value = wko?.o || "";
 
   const tStr = todayStr();
   const tbl = document.getElementById("weekTable"); tbl.innerHTML = "";
@@ -1067,8 +1085,17 @@ function addWeekTodo(){
   renderWeekTodos(Array.from({length:7},(_,i)=>addDays(curWeekStart,i)));
   inp.focus();
 }
-function saveWeekNotes(v){
-  const w = getWeek(curWeekStart); w.notes = v; touch(w); save();
+function saveWeekNotes(field, v){
+  const w = getWeek(curWeekStart); w[field] = v; touch(w); save();
+}
+function weekNotesSummary(wk){
+  if(!wk) return "";
+  const parts = [];
+  if(wk.p && wk.p.trim()) parts.push("👤 개인: "+wk.p.trim());
+  if(wk.f && wk.f.trim()) parts.push("🏠 가족: "+wk.f.trim());
+  if(wk.o && wk.o.trim()) parts.push("🏢 조직: "+wk.o.trim());
+  if(!parts.length && wk.notes && wk.notes.trim()) parts.push(wk.notes.trim());
+  return parts.join("\n");
 }
 
 /* ══════════════ 월간 ══════════════ */
@@ -1204,7 +1231,7 @@ function renderYearly(){
   // 주간 기록 목록 (연간 ↔ 주간 연동)
   const wrap = document.getElementById("yearWeekNotes");
   const weeks = Object.keys(state.weeks)
-    .filter(ws=>ws.startsWith(String(curYear)) && state.weeks[ws].notes?.trim())
+    .filter(ws=>ws.startsWith(String(curYear)) && weekNotesSummary(state.weeks[ws]))
     .sort();
   if(weeks.length){
     let html = `<h3 style="background:linear-gradient(#f4f1e9,#ece8dd);border-bottom:1px solid var(--line);padding:8px 14px;font-size:.92rem;letter-spacing:2px">주간 기록 모음 <span class="sub" style="float:right;font-size:.7rem;letter-spacing:0;color:var(--ink-soft);font-weight:400">클릭 시 주간으로 이동</span></h3>`;
@@ -1212,7 +1239,7 @@ function renderYearly(){
       const s = parse(ws), e2 = parse(addDays(ws,6));
       html += `<div class="wknote-item" onclick="openWeek('${ws}')">`+
         `<b>W${isoWeek(parse(addDays(ws,3)))} (${s.getMonth()+1}/${s.getDate()}~${e2.getMonth()+1}/${e2.getDate()})</b>`+
-        `<span>${esc(state.weeks[ws].notes)}</span></div>`;
+        `<span>${esc(weekNotesSummary(state.weeks[ws]))}</span></div>`;
     });
     wrap.innerHTML = html; wrap.style.display = "";
   }else{
