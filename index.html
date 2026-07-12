@@ -130,6 +130,7 @@ main{max-width:1120px;margin:12px auto;padding:0 14px}
 .sched-item .tx{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .sched-item.task-item{background:var(--accent-soft);color:var(--accent);font-weight:600;cursor:pointer}
 .sched-item.task-item.done{text-decoration:line-through;opacity:.55}
+.sched-item.task-item.cont{opacity:.62;border-left:3px dashed var(--accent)}
 .sched-item.gcal{background:var(--gcal-bg);color:var(--gcal);border-left:3px solid var(--gcal)}
 .sched-item.gcal.flight{background:var(--flight-bg);color:var(--flight);border-left-color:var(--flight)}
 .sched-item .t{font-size:.68rem;opacity:.8;font-variant-numeric:tabular-nums;flex-shrink:0}
@@ -294,6 +295,21 @@ main{max-width:1120px;margin:12px auto;padding:0 14px}
 #timePop .tp-row button{flex:1;border:1px solid var(--line);border-radius:6px;padding:7px 0;font-size:.78rem;font-weight:700}
 #timePop .tp-ok{background:var(--accent);color:#fff;border-color:var(--accent)}
 #timePop .tp-clr{color:var(--a-col)}
+
+/* 예정일정 타임라인(연속 블록) */
+.tl-wrap{position:relative}
+.tl-row{position:absolute;left:0;right:0;display:flex;border-bottom:1px solid var(--line-soft);pointer-events:none}
+.tl-row .hr{width:52px;flex-shrink:0;text-align:center;font-size:.72rem;color:var(--ink-soft);
+  padding-top:6px;border-right:1px solid var(--line-soft);font-variant-numeric:tabular-nums;height:100%}
+.tl-canvas{position:absolute;top:0;left:56px;right:6px;bottom:0}
+.tl-block{position:absolute;border-radius:7px;padding:2px 7px;font-size:.74rem;line-height:1.25;
+  overflow:hidden;box-shadow:0 1px 3px rgba(40,30,10,.25);min-width:0;cursor:pointer}
+.tl-block.tk{color:#fff;font-weight:600}
+.tl-block.tk.done{opacity:.45;text-decoration:line-through}
+.tl-block .tt{display:block;font-size:.62rem;opacity:.88;font-weight:700;font-variant-numeric:tabular-nums}
+.tl-block .x{position:absolute;top:1px;right:3px;color:#fff;opacity:.75;font-size:.72rem;padding:1px 3px}
+.tl-block.gc{background:var(--gcal-bg);color:var(--gcal);border-left:3px solid var(--gcal);font-weight:600}
+.tl-block.gc.flight{background:var(--flight-bg);color:var(--flight);border-left-color:var(--flight)}
 
 /* 주간 목표 3분할 (개인·가족·조직) */
 .goal3{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;padding:12px 14px}
@@ -621,6 +637,26 @@ function taskTimeLabel(t){
   if(t.end) s += "–"+t.end;
   return s;
 }
+function taskColor(t){                        // A·B·C 기본색 계열에서 항목 번호에 따라 진하기 변화
+  const bases = {A:[3,52,44], B:[38,62,41], C:[210,18,46]};   // [색상, 채도, 밝기]
+  const base = bases[t.letter] || bases.C;
+  const idx = Number((t.label||"A1").slice(1)) || 1;
+  const dl = [0,-8,8,-14,14][(idx-1)%5];       // 1번 기본, 2번 진하게, 3번 연하게…
+  return "hsl("+base[0]+","+base[1]+"%,"+Math.max(22,Math.min(66,base[2]+dl))+"%)";
+}
+function taskHours(t){                         // 업무가 차지하는 시간대 배열 (13:00–16:00 → [13,14,15])
+  if(t.allDay || t.time==null) return [];
+  let endH = t.time;
+  if(t.end){
+    const eh = Number(t.end.slice(0,2)), em = Number(t.end.slice(3,5));
+    endH = em>0 ? eh : eh-1;
+    if(endH < t.time) endH = t.time;
+    if(endH > 23) endH = 23;
+  }
+  const hrs = [];
+  for(let h=t.time; h<=endH; h++) hrs.push(h);
+  return hrs;
+}
 
 /* ══════════════ 명언 ══════════════ */
 const QUOTES = [
@@ -834,7 +870,8 @@ function drawTimePop(anchor, step){
     pop.appendChild(t2);
     const g2 = document.createElement("div"); g2.className = "tp-grid";
     const startMin = tpHour*60 + tpMin;
-    const opts = [["없음",null],["+30분",30],["+1시간",60],["+2시간",120],["+3시간",180]];
+    const opts = [["없음",null],["+30분",30],["+1시간",60],["+2시간",120],["+3시간",180],
+      ["+4시간",240],["+5시간",300],["+6시간",360],["+7시간",420],["+8시간",480]];
     opts.forEach(([lb,dur])=>{
       const b = document.createElement("button"); b.textContent = lb;
       const endStr = dur==null ? null : endLabel(startMin+dur);
@@ -900,40 +937,104 @@ function renderSchedule(){
     const t = day.priorities.find(x=>x.id===e.dataTransfer.getData("text/plain"));
     if(t){ t.allDay=true; t.time=null; t.end=null; touch(day); save(); renderTasks(); renderSchedule(); }
   };
+  // ── 타임라인: 시작~종료 시각을 비율 위치의 연속 블록 하나로 표시 ──
+  const HOUR_H = 46, START = 6*60, END = 24*60;
+  const wrap = document.createElement("div");
+  wrap.className = "tl-wrap";
+  wrap.style.height = (HOUR_H*18)+"px";
   for(let h=6; h<=23; h++){
-    const slot = document.createElement("div"); slot.className = "slot"; slot.dataset.hour = h;
-    const hr12 = h<=12 ? h : h-12;
-    slot.innerHTML = `<div class="hr">${h<12?"오전":"오후"}<br><b>${hr12}</b></div><div class="items"></div>`;
-    const items = slot.querySelector(".items");
-    events.filter(e=>!e.allDay && e.hour===h).forEach(e=> items.appendChild(evNode(e)));
-    day.priorities.filter(t=>!t.allDay && t.time===h).forEach(t=> items.appendChild(taskNode(day,t)));
-    // 같은 시간대 다중 항목 병렬 표시 (1개=전체폭, 2개=2열, 3개=3열, 최대 4열)
-    const kids = [...items.children];
-    const cols = Math.min(4, Math.max(1, kids.length));
-    kids.forEach(k=>{ k.style.flex = `1 1 calc(${(100/cols).toFixed(2)}% - 6px)`; });
-    slot.ondragover = (e)=>{ e.preventDefault(); slot.classList.add("dragover"); };
-    slot.ondragleave = ()=> slot.classList.remove("dragover");
-    slot.ondrop = (e)=>{
-      e.preventDefault(); slot.classList.remove("dragover");
-      const t = day.priorities.find(x=>x.id===e.dataTransfer.getData("text/plain"));
-      if(t){ t.time = h; if(t.min==null) t.min = 0; t.allDay = false; touch(day); save(); renderTasks(); renderSchedule(); }
-    };
-    list.appendChild(slot);
+    const row = document.createElement("div"); row.className = "tl-row";
+    row.style.top = ((h*60-START)/60*HOUR_H)+"px"; row.style.height = HOUR_H+"px";
+    const hr12 = h<=12?h:h-12;
+    row.innerHTML = `<div class="hr">${h<12?"오전":"오후"}<br><b>${hr12}</b></div>`;
+    wrap.appendChild(row);
   }
+  const canvas = document.createElement("div"); canvas.className = "tl-canvas";
+  wrap.appendChild(canvas);
+  // 블록 수집 (분 단위)
+  const blocks = [];
+  events.filter(e=>!e.allDay).forEach(e=>{
+    const sm = e.sm!=null ? e.sm : e.hour*60 + Number((e.timeLabel||"").slice(3,5)||0);
+    const em = e.em!=null ? e.em : sm+60;
+    blocks.push({sm, em, ev:e});
+  });
+  day.priorities.filter(t=>!t.allDay && t.time!=null).forEach(t=>{
+    const sm = t.time*60 + (t.min||0);
+    let em = t.end ? Number(t.end.slice(0,2))*60 + Number(t.end.slice(3,5)) : sm+60;
+    if(em <= sm) em = sm+30;
+    blocks.push({sm, em, task:t});
+  });
+  // 겹치는 블록은 같은 묶음에서 나란히(레인 배치)
+  blocks.sort((a,b)=> a.sm-b.sm || b.em-a.em);
+  let lanes=[], cluster=[], clusterEnd=-1;
+  const closeCluster = ()=>{ const n=lanes.length||1; cluster.forEach(b=>b.cols=n); cluster=[]; lanes=[]; };
+  blocks.forEach(b=>{
+    if(cluster.length && b.sm >= clusterEnd) closeCluster();
+    let li = lanes.findIndex(le=>le <= b.sm);
+    if(li<0){ li = lanes.length; lanes.push(0); }
+    lanes[li] = b.em; b.lane = li;
+    cluster.push(b); clusterEnd = Math.max(clusterEnd, b.em);
+  });
+  closeCluster();
+  // 렌더
+  blocks.forEach(b=>{
+    const sm = Math.max(b.sm, START), em = Math.min(Math.max(b.em, sm+24), END);
+    const el = document.createElement("div");
+    el.style.top = ((sm-START)/60*HOUR_H)+"px";
+    el.style.height = Math.max(20, (em-sm)/60*HOUR_H - 2)+"px";
+    const wPct = 100/b.cols;
+    el.style.left = (b.lane*wPct)+"%";
+    el.style.width = "calc("+wPct+"% - 4px)";
+    if(b.task){
+      const t = b.task;
+      el.className = "tl-block tk"+(t.status===1?" done":"");
+      el.style.background = taskColor(t);
+      el.innerHTML = `<span class="tt">${taskTimeLabel(t)}</span><b>${t.label}</b> ${esc(t.text)||"(내용 없음)"}<button class="x" title="일정에서 제거">✕</button>`;
+      el.title = "클릭: 시간·기한 조절 / 드래그: 이동";
+      el.draggable = true;
+      el.ondragstart = (ev)=>{ ev.dataTransfer.setData("text/plain", t.id); };
+      el.onclick = (ev)=>{ if(!ev.target.classList.contains("x")) openTimePop(el, t); };
+      el.querySelector(".x").onclick = ()=>{ t.time=null; t.end=null; t.allDay=false; touch(day); save(); renderTasks(); renderSchedule(); };
+    }else{
+      const e2 = b.ev;
+      el.className = "tl-block gc"+(e2.flight?" flight":"");
+      el.innerHTML = `<span class="tt">${e2.flight?"✈ ":""}${e2.timeLabel}</span>${esc(e2.summary)}`;
+      el.title = e2.summary;
+    }
+    canvas.appendChild(el);
+  });
+  // 드롭: 놓은 위치의 시간대로 이동 (기한이 있으면 길이 유지)
+  wrap.ondragover = (e)=>{ e.preventDefault(); };
+  wrap.ondrop = (e)=>{
+    e.preventDefault();
+    const t = day.priorities.find(x=>x.id===e.dataTransfer.getData("text/plain"));
+    if(!t) return;
+    const y = e.clientY - wrap.getBoundingClientRect().top;
+    const h = Math.min(23, Math.max(6, 6 + Math.floor(y/HOUR_H)));
+    let dur = null;
+    if(t.end && t.time!=null) dur = (Number(t.end.slice(0,2))*60+Number(t.end.slice(3,5))) - (t.time*60+(t.min||0));
+    t.time = h; t.min = 0; t.allDay = false;
+    if(dur!=null && dur>0) t.end = endLabel(h*60+dur);
+    touch(day); save(); renderTasks(); renderSchedule();
+  };
+  list.appendChild(wrap);
   const note = document.getElementById("gcalNote");
   note.innerHTML = state.settings.connected
     ? `📅 구글캘린더 일정 ${events.length}건 표시됨 (파란색 / ✈보라색 = 비행) · 업무는 끌어서 시간 이동, 클릭하면 분·기한 세부 조절`
     : `구글캘린더를 연결하면 일정이 자동 표시됩니다. <a onclick="openSettings()">설정에서 연결 →</a> · 업무는 끌어서 시간 이동, 클릭하면 분·기한 세부 조절`;
 }
-function taskNode(day, t){
+function taskNode(day, t, h){
+  const cont = h!=null && t.time!=null && h>t.time;   // 시작 이후의 진행 중(연속) 구간
   const n = document.createElement("div");
-  n.className = "sched-item task-item"+(t.status===1?" done":"");
-  n.title = "클릭: 시간·기한 세부 조절 / 드래그: 시간 이동";
-  n.draggable = true;
-  n.innerHTML = `<span class="t">${taskTimeLabel(t)}</span><b>${t.label}</b><span class="tx">${esc(t.text)||"(내용 없음)"}</span><button class="x" title="일정에서 제거">✕</button>`;
+  n.className = "sched-item task-item"+(t.status===1?" done":"")+(cont?" cont":"");
+  n.title = cont ? "진행 중 구간 — 클릭하면 시간·기한 조절" : "클릭: 시간·기한 세부 조절 / 드래그: 시간 이동";
+  n.draggable = !cont;
+  n.innerHTML = `<span class="t">${cont?"⋯":taskTimeLabel(t)}</span><b>${t.label}</b><span class="tx">${esc(t.text)||"(내용 없음)"}</span>`
+    + (cont?"":`<button class="x" title="일정에서 제거">✕</button>`);
   n.onclick = (e)=>{ if(!e.target.classList.contains("x")) openTimePop(n, t); };
   n.ondragstart = (e)=>{ e.dataTransfer.setData("text/plain", t.id); };
-  n.querySelector(".x").onclick = ()=>{ t.time=null; t.end=null; t.allDay=false; touch(day); save(); renderTasks(); renderSchedule(); };
+  const xb = n.querySelector(".x");
+  if(xb) xb.onclick = ()=>{ t.time=null; t.end=null; t.allDay=false; touch(day); save(); renderTasks(); renderSchedule(); };
   return n;
 }
 function evNode(e){
@@ -1019,8 +1120,9 @@ function renderWeekly(){
       eventsForDate(ds).filter(ev=>!ev.allDay && ev.hour===h).forEach(ev=>{
         cell += `<span class="w-chip gc ${ev.flight?'flight':''}" title="${esc(ev.summary)}">${ev.flight?"✈ ":""}${ev.timeLabel} ${esc(ev.summary)}</span>`;
       });
-      if(day) day.priorities.filter(t=>t.time===h).forEach(t=>{
-        cell += `<span class="w-chip tk ${t.status===1?'done':''}" onclick="openDate('${ds}')" title="${esc(t.text)}">${taskTimeLabel(t)} ${t.label} ${esc(t.text)}</span>`;
+      if(day) day.priorities.filter(t=>!t.allDay && t.time!=null && taskHours(t).includes(h)).forEach(t=>{
+        const cont = h>t.time;
+        cell += `<span class="w-chip tk ${t.status===1?'done':''}"${cont?' style="opacity:.55"':''} onclick="openDate('${ds}')" title="${esc(t.text)}">${cont?"⋯":taskTimeLabel(t)} ${t.label} ${esc(t.text)}</span>`;
       });
       html += `<td class="${ds===tStr?'todaycol':''}">${cell}</td>`;
     });
@@ -1357,7 +1459,14 @@ async function loadMonthEvents(ym, force){
         const sd = allDay ? ev.start.date : ev.start.dateTime.slice(0,10);
         const hour = allDay ? null : Number(ev.start.dateTime.slice(11,13));
         const min  = allDay ? "" : ev.start.dateTime.slice(14,16);
-        all.push({ summary: ev.summary||"(제목 없음)", date: sd, allDay,
+        let sm=null, em=null;
+        if(!allDay){
+          sm = hour*60 + Number(min);
+          if(ev.end && ev.end.dateTime && ev.end.dateTime.slice(0,10)===sd)
+            em = Number(ev.end.dateTime.slice(11,13))*60 + Number(ev.end.dateTime.slice(14,16));
+          if(em==null || em<=sm) em = sm+60;
+        }
+        all.push({ summary: ev.summary||"(제목 없음)", date: sd, allDay, sm, em,
           hour: allDay?null:Math.min(23,Math.max(6,hour)),
           timeLabel: allDay?"":`${pad(hour)}:${min}`,
           flight: isFlight(ev.summary||"") });
