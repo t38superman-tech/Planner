@@ -311,6 +311,45 @@ main{max-width:1120px;margin:12px auto;padding:0 14px}
 .tl-block.gc{background:var(--gcal-bg);color:var(--gcal);border-left:3px solid var(--gcal);font-weight:600}
 .tl-block.gc.flight{background:var(--flight-bg);color:var(--flight);border-left-color:var(--flight)}
 
+/* 일간 '이번 주 목표' 3분할 */
+.wk3{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}
+@media(max-width:760px){.wk3{grid-template-columns:1fr}}
+.wk3col{border:1px solid #e3d9b8;border-radius:8px;padding:7px 9px;min-width:0}
+.wk3col.wp{background:#eef4f8;border-color:#cfe0ea}
+.wk3col.wf{background:#eef6ea;border-color:#d3e6c8}
+.wk3col.wo{background:#f7f0e6;border-color:#ead9c0}
+.wk3h{font-size:.76rem;font-weight:800;cursor:pointer;margin-bottom:3px}
+.wk3col.wp .wk3h{color:#3f6d8e}.wk3col.wf .wk3h{color:#5e8c46}.wk3col.wo .wk3h{color:#8c5e2f}
+.wk3goal{font-size:.78rem;color:#5b5647;white-space:pre-line;margin-bottom:4px}
+.wk3goal.empty{color:#b3a76e}
+.wk3todos{display:flex;flex-direction:column;gap:3px}
+.wk3todo{display:flex;align-items:center;gap:5px;font-size:.78rem}
+.wk3todo.done span{text-decoration:line-through;color:var(--done)}
+.wk3st{width:20px;height:20px;border:1.5px solid var(--line);border-radius:5px;background:#fff;
+  font-size:.72rem;font-weight:700;flex-shrink:0;display:flex;align-items:center;justify-content:center}
+.wk3st.s1{color:#2e8b46;border-color:#2e8b46}.wk3st.s2{color:var(--b-col);border-color:var(--b-col)}
+.wk3st.s3{color:var(--c-col);border-color:var(--c-col)}.wk3st.s4{color:#aa3b35;border-color:#aa3b35}
+
+/* 주간 TODO 배지 · 요일 복수선택 · 이동 */
+.pri-b.wp{background:#3f6d8e}.pri-b.wf{background:#5e8c46}.pri-b.wo{background:#8c5e2f}
+.pri-b.wp,.pri-b.wf,.pri-b.wo{font-size:.9rem}
+.day-b.on{background:var(--accent);color:#fff;border-color:var(--accent)}
+.inbox-item .go{color:var(--accent);font-size:.95rem;padding:0 5px;flex-shrink:0}
+
+/* 주간 시간표 타임라인 */
+.wtable td.tlaxis{padding:0;vertical-align:top;width:44px;min-width:44px;background:#faf8f2}
+.tlaxinner{position:relative}
+.tlaxinner span{position:absolute;left:0;right:0;text-align:center;font-size:.6rem;color:var(--ink-soft);
+  font-variant-numeric:tabular-nums;transform:translateY(-1px)}
+.wtable td.tlday{padding:0;vertical-align:top}
+.tlcanvas{position:relative;background:repeating-linear-gradient(#fff,#fff 27px,var(--line-soft) 27px,var(--line-soft) 28px)}
+.tlb{position:absolute;border-radius:5px;padding:1px 4px;font-size:.63rem;line-height:1.12;overflow:hidden;
+  box-shadow:0 1px 2px rgba(40,30,10,.2);cursor:pointer}
+.tlb.tk{color:#fff;font-weight:600}
+.tlb.tk.done{opacity:.45;text-decoration:line-through}
+.tlb.gc{background:var(--gcal-bg);color:var(--gcal);border-left:2px solid var(--gcal);font-weight:600}
+.tlb.gc.flight{background:var(--flight-bg);color:var(--flight);border-left-color:var(--flight)}
+
 /* 주간 목표 3분할 (개인·가족·조직) */
 .goal3{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;padding:12px 14px}
 @media(max-width:760px){.goal3{grid-template-columns:1fr}}
@@ -446,7 +485,7 @@ main{max-width:1120px;margin:12px auto;padding:0 14px}
       </div>
     </div>
     <div class="card" style="margin-top:14px">
-      <h3>주간 TO DO LIST <span class="sub">구분(A·B·C·기타) 선택 → 요일 버튼을 누르면 그날의 우선업무로 이동</span></h3>
+      <h3>주간 TO DO LIST <span class="sub">구분(개인·가족·조직) + 요일 복수 선택 · 선택한 날 일간에 표시</span></h3>
       <div id="weekTodoList"></div>
       <div class="inbox-add">
         <input id="weekTodoInput" placeholder="이번 주에 할 일을 메모… (구분은 추가 후 배지를 탭하여 변경)" onkeydown="if(event.key==='Enter')addWeekTodo()">
@@ -644,6 +683,18 @@ function taskColor(t){                        // A·B·C 기본색 계열에서 
   const dl = [0,-8,8,-14,14][(idx-1)%5];       // 1번 기본, 2번 진하게, 3번 연하게…
   return "hsl("+base[0]+","+base[1]+"%,"+Math.max(22,Math.min(66,base[2]+dl))+"%)";
 }
+function packLanes(blocks){                    // 겹치는 블록을 나란한 레인으로 배치
+  blocks.sort((a,b)=> a.sm-b.sm || b.em-a.em);
+  let lanes=[], cluster=[], clusterEnd=-1;
+  const close=()=>{ const n=lanes.length||1; cluster.forEach(b=>b.cols=n); cluster=[]; lanes=[]; };
+  blocks.forEach(b=>{
+    if(cluster.length && b.sm>=clusterEnd) close();
+    let li=lanes.findIndex(le=>le<=b.sm);
+    if(li<0){ li=lanes.length; lanes.push(0); }
+    lanes[li]=b.em; b.lane=li; cluster.push(b); clusterEnd=Math.max(clusterEnd,b.em);
+  });
+  close(); return blocks;
+}
 function taskHours(t){                         // 업무가 차지하는 시간대 배열 (13:00–16:00 → [13,14,15])
   if(t.allDay || t.time==null) return [];
   let endH = t.time;
@@ -712,16 +763,48 @@ function renderDaily(){
     `${doy}번째 날 · ${total-doy}일 남음<br>Week ${isoWeek(d)}`;
   const q = QUOTES[doy % QUOTES.length];
   document.getElementById("quoteLine").innerHTML = `“${q[0]}” — <b>${q[1]}</b>`;
-  // 주간 목표 배너 (일간 ↔ 주간 연동)
-  const wsum = weekNotesSummary(state.weeks[weekStart(curDate)]);
-  const bn = document.getElementById("dayWeekGoal");
-  bn.innerHTML = wsum
-    ? `<div class="inner" onclick="openWeek('${weekStart(curDate)}')"><b>📌 이번 주 목표</b><span>${esc(wsum)}</span></div>`
-    : `<div class="inner" onclick="openWeek('${weekStart(curDate)}')"><b>📌 이번 주 목표</b><span style="color:#b3a76e">아직 없음 — 눌러서 주간 화면에서 작성</span></div>`;
+  // 주간 목표 배너 (일간 ↔ 주간 연동) — 개인·가족·조직 3분할 + 각 TODO 상태
+  renderDayWeekGoal();
   document.getElementById("impTitle").value = day.title||"";
   document.getElementById("noteArea").value = day.notes||"";
   renderTasks(); renderInbox(); renderSchedule();
   loadMonthEvents(curDate.slice(0,7)).then(()=>{ renderSchedule(); });
+}
+const WCATS = [["p","👤 개인","wp"],["f","🏠 가족","wf"],["o","🏢 조직","wo"]];
+function renderDayWeekGoal(){
+  const ws = weekStart(curDate);
+  const wk = state.weeks[ws];
+  let html = `<div class="wk3">`;
+  WCATS.forEach(([k,label,cls])=>{
+    const goal = (wk && wk[k]) ? wk[k].trim() : "";
+    const todos = (wk?.todos||[]).filter(t=>(t.cat||"p")===k && (t.days||[]).includes(curDate));
+    html += `<div class="wk3col ${cls}">`;
+    html += `<div class="wk3h" onclick="openWeek('${ws}')">${label}</div>`;
+    html += goal ? `<div class="wk3goal">${esc(goal)}</div>` : `<div class="wk3goal empty">목표·메모 없음</div>`;
+    if(todos.length){
+      html += `<div class="wk3todos">`;
+      todos.forEach(t=>{
+        const st = (t.status && t.status[curDate]) || 0;
+        html += `<div class="wk3todo ${st===1?'done':''}"><button class="wk3st s${st}" data-id="${t.id}" title="완료·진행·연기·취소 전환">${STATUS[st]||"☐"}</button><span>${esc(t.text)}</span></div>`;
+      });
+      html += `</div>`;
+    }
+    html += `</div>`;
+  });
+  html += `</div>`;
+  const bn = document.getElementById("dayWeekGoal");
+  bn.innerHTML = html;
+  bn.querySelectorAll(".wk3st").forEach(b=>{
+    b.onclick = (e)=>{
+      e.stopPropagation();
+      const w = getWeek(ws);
+      const t = (w.todos||[]).find(x=>x.id===b.dataset.id);
+      if(!t) return;
+      t.status = t.status || {};
+      t.status[curDate] = ((t.status[curDate]||0)+1)%5;
+      touch(w); save(); renderDayWeekGoal();
+    };
+  });
 }
 
 /* ── 우선업무 ── */
@@ -1112,22 +1195,42 @@ function renderWeekly(){
     alldayCells.forEach((c,i)=>{ html += `<td class="${days[i]===tStr?'todaycol':''}">${c}</td>`; });
     html += `</tr>`;
   }
-  // 6시~23시
-  for(let h=6; h<=23; h++){
-    html += `<tr><td class="hr">${h<12?"오전":"오후"} ${h<=12?h:h-12}</td>`;
-    days.forEach(ds=>{
-      const day = peekDay(ds); let cell = "";
-      eventsForDate(ds).filter(ev=>!ev.allDay && ev.hour===h).forEach(ev=>{
-        cell += `<span class="w-chip gc ${ev.flight?'flight':''}" title="${esc(ev.summary)}">${ev.flight?"✈ ":""}${ev.timeLabel} ${esc(ev.summary)}</span>`;
-      });
-      if(day) day.priorities.filter(t=>!t.allDay && t.time!=null && taskHours(t).includes(h)).forEach(t=>{
-        const cont = h>t.time;
-        cell += `<span class="w-chip tk ${t.status===1?'done':''}"${cont?' style="opacity:.55"':''} onclick="openDate('${ds}')" title="${esc(t.text)}">${cont?"⋯":taskTimeLabel(t)} ${t.label} ${esc(t.text)}</span>`;
-      });
-      html += `<td class="${ds===tStr?'todaycol':''}">${cell}</td>`;
+  // 시간표 타임라인 (6~23시, 연속 블록 · 일간과 동일 색·겹침 원칙)
+  const WH=28, WSTART=6*60, WEND=24*60, WHT=WH*18;
+  html += `<tr class="tlrow"><td class="tlaxis"><div class="tlaxinner" style="height:${WHT}px">`;
+  for(let h=6; h<=23; h++){ html += `<span style="top:${(h*60-WSTART)/60*WH}px">${h<12?"오전":"오후"} ${h<=12?h:h-12}</span>`; }
+  html += `</div></td>`;
+  days.forEach(ds=>{
+    const day = peekDay(ds);
+    const blocks = [];
+    eventsForDate(ds).filter(e=>!e.allDay).forEach(e=>{
+      const sm = e.sm!=null ? e.sm : e.hour*60;
+      const em = e.em!=null ? e.em : sm+60;
+      blocks.push({sm, em, ev:e});
     });
-    html += `</tr>`;
-  }
+    if(day) day.priorities.filter(t=>!t.allDay && t.time!=null).forEach(t=>{
+      const sm = t.time*60 + (t.min||0);
+      let em = t.end ? Number(t.end.slice(0,2))*60 + Number(t.end.slice(3,5)) : sm+60;
+      if(em <= sm) em = sm+30;
+      blocks.push({sm, em, task:t});
+    });
+    packLanes(blocks);
+    let cell = "";
+    blocks.forEach(b=>{
+      const sm = Math.max(b.sm, WSTART), em = Math.min(Math.max(b.em, sm+18), WEND);
+      const top = (sm-WSTART)/60*WH, ht = Math.max(15, (em-sm)/60*WH - 1);
+      const wp = 100/b.cols, left = b.lane*wp;
+      if(b.task){
+        const t = b.task;
+        cell += `<div class="tlb tk ${t.status===1?'done':''}" style="top:${top}px;height:${ht}px;left:${left}%;width:calc(${wp}% - 2px);background:${taskColor(t)}" onclick="openDate('${ds}')" title="${esc(t.text)}"><b>${t.label}</b> ${esc(t.text)}</div>`;
+      }else{
+        const e2 = b.ev;
+        cell += `<div class="tlb gc ${e2.flight?'flight':''}" style="top:${top}px;height:${ht}px;left:${left}%;width:calc(${wp}% - 2px)" title="${esc(e2.summary)}">${e2.flight?"✈ ":""}${esc(e2.summary)}</div>`;
+      }
+    });
+    html += `<td class="tlday ${ds===tStr?'todaycol':''}"><div class="tlcanvas" style="height:${WHT}px">${cell}</div></td>`;
+  });
+  html += `</tr>`;
   tbl.innerHTML = html;
   renderWeekTodos(days);
   loadMonthEvents(ws.slice(0,7)).then(()=>{});
@@ -1138,20 +1241,25 @@ function renderWeekTodos(days){
   const todos = wk?.todos || [];
   const box = document.getElementById("weekTodoList"); box.innerHTML = "";
   if(!todos.length){
-    box.innerHTML = `<div class="empty-hint" style="padding:10px">이번 주에 할 일을 메모해 두고 구분(A·B·C·기타)을 정한 뒤,<br>요일 버튼을 누르면 그날 일간의 우선업무로 이동합니다. (기타는 A로 반영)</div>`;
+    box.innerHTML = `<div class="empty-hint" style="padding:10px">할 일을 추가한 뒤 구분(개인·가족·조직)과 요일(복수 선택 가능)을 정하세요.<br>선택한 날의 일간 '이번 주 목표'에 표시되며, ➜ 를 누르면 해당 날짜로 이동합니다.</div>`;
     return;
   }
-  const LETTERS = ["A","B","C","기타"];
+  const CATS = [["p","👤","wp"],["f","🏠","wf"],["o","🏢","wo"]];
+  const CATSEQ = ["p","f","o"];
   todos.forEach(item=>{
+    if(!item.cat){ item.cat = item.letter==="기타"?"o":"p"; }   // 구모델 이전
+    if(!item.days) item.days = [];
+    if(!item.status) item.status = {};
+    const cc = CATS.find(c=>c[0]===item.cat) || CATS[0];
     const row = document.createElement("div"); row.className = "inbox-item";
-    const cls = item.letter==="기타" ? "E" : item.letter;
     row.innerHTML =
-      `<button class="pri-b ${cls}" title="탭하여 A→B→C→기타 변경">${item.letter==="기타"?"기":item.letter}</button>`+
+      `<button class="pri-b ${cc[2]}" title="탭하여 개인→가족→조직 변경">${cc[1]}</button>`+
       `<input class="txt" value="${esc(item.text)}">`+
-      `<span class="wtodo-days">${days.map((ds,i)=>`<button class="day-b" data-ds="${ds}">${DOW[i]}<br>${Number(ds.slice(8))}</button>`).join("")}</span>`+
+      `<span class="wtodo-days">${days.map((ds,i)=>`<button class="day-b ${item.days.includes(ds)?'on':''}" data-ds="${ds}">${DOW[i]}<br>${Number(ds.slice(8))}</button>`).join("")}</span>`+
+      `<button class="go" title="선택한 날짜로 이동">➜</button>`+
       `<button class="del">🗑</button>`;
     row.querySelector(".pri-b").onclick = ()=>{
-      item.letter = LETTERS[(LETTERS.indexOf(item.letter)+1)%4];
+      item.cat = CATSEQ[(CATSEQ.indexOf(item.cat)+1)%3];
       touch(getWeek(curWeekStart)); save(); renderWeekTodos(days);
     };
     const inp = row.querySelector(".txt");
@@ -1159,16 +1267,15 @@ function renderWeekTodos(days){
     row.querySelectorAll(".day-b").forEach(b=>{
       b.onclick = ()=>{
         const ds = b.dataset.ds;
-        const day = getDay(ds);
-        const L = item.letter==="기타" ? "A" : item.letter;   // 기타는 일간의 A로 반영
-        newTask(day, L, item.text);
-        const w = getWeek(curWeekStart);
-        w.todos = (w.todos||[]).filter(x=>x.id!==item.id);
-        touch(day); touch(w); save(); renderWeekly();
-        const d = parse(ds);
-        toast(`"${item.text.slice(0,12)}${item.text.length>12?"…":""}" → ${d.getMonth()+1}/${d.getDate()}(${DOW[d.getDay()]}) 우선업무 ${L}`);
+        if(item.days.includes(ds)) item.days = item.days.filter(x=>x!==ds);
+        else item.days.push(ds);
+        touch(getWeek(curWeekStart)); save(); renderWeekTodos(days);
       };
     });
+    row.querySelector(".go").onclick = ()=>{
+      const target = item.days.slice().sort()[0];
+      if(target) openDate(target); else toast("먼저 요일을 선택하세요.");
+    };
     row.querySelector(".del").onclick = ()=>{
       const w = getWeek(curWeekStart);
       w.todos = (w.todos||[]).filter(x=>x.id!==item.id);
@@ -1182,7 +1289,7 @@ function addWeekTodo(){
   const v = inp.value.trim(); if(!v) return;
   const w = getWeek(curWeekStart);
   w.todos = w.todos || [];
-  w.todos.push({ id:"w"+Date.now()+Math.random().toString(36).slice(2,6), text:v, letter:"A" });
+  w.todos.push({ id:"w"+Date.now()+Math.random().toString(36).slice(2,6), text:v, cat:"p", days:[], status:{} });
   touch(w); save(); inp.value = "";
   renderWeekTodos(Array.from({length:7},(_,i)=>addDays(curWeekStart,i)));
   inp.focus();
