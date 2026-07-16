@@ -332,7 +332,7 @@ main{max-width:1120px;margin:12px auto;padding:0 14px}
 
 /* 주간 TODO 배지 · 요일 복수선택 · 이동 */
 .pri-b.wp{background:#3f6d8e}.pri-b.wf{background:#5e8c46}.pri-b.wo{background:#8c5e2f}
-.pri-b.wp,.pri-b.wf,.pri-b.wo{font-size:.9rem}
+.pri-b.wp,.pri-b.wf,.pri-b.wo,.pri-b.A,.pri-b.B,.pri-b.C{font-size:.92rem}
 .day-b.on{background:var(--accent);color:#fff;border-color:var(--accent)}
 .inbox-item .go{color:var(--accent);font-size:.95rem;padding:0 5px;flex-shrink:0}
 
@@ -420,11 +420,11 @@ main{max-width:1120px;margin:12px auto;padding:0 14px}
         <h3>오늘의 우선업무 <span class="sub">A·B·C 우선순위 · ★=월간 표시</span></h3>
         <div id="taskList"></div>
         <div class="addrow">
-          <button class="addA" onclick="addTask('A')">＋ A 추가</button>
-          <button class="addB" onclick="addTask('B')">＋ B 추가</button>
-          <button class="addC" onclick="addTask('C')">＋ C 추가</button>
+          <button class="addA" onclick="addTask('A')">＋ 👤 개인</button>
+          <button class="addB" onclick="addTask('B')">＋ 🏠 가족</button>
+          <button class="addC" onclick="addTask('C')">＋ 🏢 조직</button>
         </div>
-        <div class="priolegend">A = 가장 중요·급함 · B = 그 다음 · C = 그 다음 |
+        <div class="priolegend">👤 개인 · 🏠 가족 · 🏢 조직 |
           상태칸 탭: ☐→✓완료→◐진행→→연기→✗취소 | ★ 탭 시 월간 테이블에 표시</div>
         <div class="fwdrow"><button onclick="forwardOpen()">→ 미완료 업무를 다음 날로 이관</button></div>
         <div class="inbox-head">📥 TO DO LIST 메모함 <span class="sub">A·B·C를 누르면 오늘의 우선업무로 이동</span></div>
@@ -679,7 +679,7 @@ function taskTimeLabel(t){
 function taskColor(t){                        // A·B·C 기본색 계열에서 항목 번호에 따라 진하기 변화
   const bases = {A:[3,52,44], B:[38,62,41], C:[210,18,46]};   // [색상, 채도, 밝기]
   const base = bases[t.letter] || bases.C;
-  const idx = Number((t.label||"A1").slice(1)) || 1;
+  const idx = t.num || 1;
   const dl = [0,-8,8,-14,14][(idx-1)%5];       // 1번 기본, 2번 진하게, 3번 연하게…
   return "hsl("+base[0]+","+base[1]+"%,"+Math.max(22,Math.min(66,base[2]+dl))+"%)";
 }
@@ -809,11 +809,13 @@ function renderDayWeekGoal(){
 
 /* ── 우선업무 ── */
 const STATUS = ["","✓","◐","→","✗"];
+const CATEMOJI = {A:"👤",B:"🏠",C:"🏢"};      // A=개인 · B=가족 · C=조직
+const CATNAME  = {A:"개인",B:"가족",C:"조직"};
 function sortTasks(day){
   const order = {A:0,B:1,C:2};
   day.priorities.sort((a,b)=> order[a.letter]-order[b.letter] || a.seq-b.seq);
   let n = {A:1,B:1,C:1};
-  day.priorities.forEach(t => t.label = t.letter + (n[t.letter]++));
+  day.priorities.forEach(t => { t.num = n[t.letter]++; t.label = CATEMOJI[t.letter] + t.num; });
 }
 function renderTasks(){
   const day = getDay(curDate); sortTasks(day);
@@ -828,7 +830,7 @@ function renderTasks(){
     row.draggable = true; row.dataset.id = t.id;
     row.innerHTML =
       `<span class="grip">⠿</span>`+
-      `<span class="pri ${t.letter}" title="탭하여 A→B→C 변경">${t.label}</span>`+
+      `<span class="pri ${t.letter}" title="탭하여 개인→가족→조직 변경">${t.label}</span>`+
       `<button class="status s${t.status}">${STATUS[t.status]}</button>`+
       `<input class="txt" value="${esc(t.text)}" placeholder="업무 내용">`+
       ((t.time!=null||t.allDay)?`<span class="timechip">${taskTimeLabel(t)}</span>`:"")+
@@ -885,7 +887,7 @@ function renderInbox(){
   state.inbox.forEach(item=>{
     const row = document.createElement("div"); row.className = "inbox-item";
     row.innerHTML =
-      `<button class="pri-b A">A</button><button class="pri-b B">B</button><button class="pri-b C">C</button>`+
+      `<button class="pri-b A">👤</button><button class="pri-b B">🏠</button><button class="pri-b C">🏢</button>`+
       `<input class="txt" value="${esc(item.text)}">`+
       `<button class="del">🗑</button>`;
     ["A","B","C"].forEach(L=>{
@@ -895,7 +897,7 @@ function renderInbox(){
         state.inbox = state.inbox.filter(x=>x.id!==item.id);
         state.inboxUpdatedAt = Date.now();
         touch(day); save(); renderTasks(); renderInbox();
-        toast(`"${item.text.slice(0,14)}${item.text.length>14?"…":""}" → 오늘의 우선업무 ${L}`);
+        toast(`"${item.text.slice(0,14)}${item.text.length>14?"…":""}" → 오늘의 우선업무 ${CATNAME[L]}`);
       };
     });
     const inp = row.querySelector(".txt");
@@ -1072,7 +1074,7 @@ function renderSchedule(){
       const t = b.task;
       el.className = "tl-block tk"+(t.status===1?" done":"");
       el.style.background = taskColor(t);
-      el.innerHTML = `<span class="tt">${taskTimeLabel(t)}</span><b>${t.label}</b> ${esc(t.text)||"(내용 없음)"}<button class="x" title="일정에서 제거">✕</button>`;
+      el.innerHTML = `<b>${t.label}</b> ${esc(t.text)||"(내용 없음)"}<button class="x" title="일정에서 제거">✕</button>`;
       el.title = "클릭: 시간·기한 조절 / 드래그: 이동";
       el.draggable = true;
       el.ondragstart = (ev)=>{ ev.dataTransfer.setData("text/plain", t.id); };
@@ -1081,7 +1083,7 @@ function renderSchedule(){
     }else{
       const e2 = b.ev;
       el.className = "tl-block gc"+(e2.flight?" flight":"");
-      el.innerHTML = `<span class="tt">${e2.flight?"✈ ":""}${e2.timeLabel}</span>${esc(e2.summary)}`;
+      el.innerHTML = `${e2.flight?"✈ ":""}${esc(e2.summary)}`;
       el.title = e2.summary;
     }
     canvas.appendChild(el);
@@ -1723,11 +1725,11 @@ function openQuickAdd(e, ds){
   const d = parse(ds);
   pop.innerHTML =
     `<div class="tp-title">${d.getMonth()+1}/${d.getDate()}(${DOW[d.getDay()]}) 일정·업무 추가</div>`+
-    `<input id="qpText" placeholder="내용 입력 후 우선순위 선택" onkeydown="if(event.key==='Enter')qpAdd('A')">`+
+    `<input id="qpText" placeholder="내용 입력 후 구분 선택" onkeydown="if(event.key==='Enter')qpAdd('A')">`+
     `<div class="qp-row">`+
-    `<button style="background:var(--a-col)" onclick="qpAdd('A')">A</button>`+
-    `<button style="background:var(--b-col)" onclick="qpAdd('B')">B</button>`+
-    `<button style="background:var(--c-col)" onclick="qpAdd('C')">C</button>`+
+    `<button style="background:var(--a-col)" onclick="qpAdd('A')">👤 개인</button>`+
+    `<button style="background:var(--b-col)" onclick="qpAdd('B')">🏠 가족</button>`+
+    `<button style="background:var(--c-col)" onclick="qpAdd('C')">🏢 조직</button>`+
     `</div>`;
   const rc = e.target.getBoundingClientRect();
   pop.style.left = Math.min(window.innerWidth-270, Math.max(8, rc.left-80))+"px";
@@ -1744,7 +1746,7 @@ function qpAdd(L){
   document.getElementById("quickPop").classList.remove("show");
   renderMonthly();
   const d = parse(qpDate);
-  toast(`${d.getMonth()+1}/${d.getDate()}(${DOW[d.getDay()]}) 우선업무 ${L}에 추가했습니다.`);
+  toast(`${d.getMonth()+1}/${d.getDate()}(${DOW[d.getDay()]}) 우선업무 ${CATNAME[L]}에 추가했습니다.`);
 }
 document.addEventListener("click",(e)=>{
   const pop = document.getElementById("quickPop");
